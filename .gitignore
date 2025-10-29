@@ -1,0 +1,49 @@
+# 🐍 Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+
+# 📦 Entorno virtual
+env/
+venv/
+ENV/
+env.bak/
+*.env
+
+# 📁 VS Code
+.vscode/
+
+# 📦 Dependencias de Node.js (frontend)
+node_modules/
+dist/
+build/
+
+# ⚙️ Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# 📄 Archivos de configuración temporales
+*.swp
+*.bak
+*.tmp
+
+# 📦 Paquetes y compilaciones
+*.egg-info/
+*.egg
+*.manifest
+*.spec
+
+# 📦 Archivos de instalación
+pip-wheel-metadata/
+__pycache__/
+*.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.pytest_cache/
+.coverage
+.cache/
