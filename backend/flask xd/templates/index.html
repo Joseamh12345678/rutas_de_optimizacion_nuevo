@@ -2,124 +2,113 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>IA Rutas - Monitor</title>
+  <title>IA Rutas — Monitor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
   />
   <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <style>
     body {
       margin: 0;
-      padding: 0;
+      font-family: "Segoe UI", sans-serif;
     }
     #map {
       width: 100%;
       height: 100vh;
     }
-    #panel {
+    #status {
       position: absolute;
       top: 10px;
-      right: 10px;
-      background: white;
-      padding: 10px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       z-index: 1000;
-      border-radius: 6px;
-      box-shadow: 0 0 8px rgba(0,0,0,0.2);
-      width: 350px;
     }
   </style>
 </head>
+
 <body>
   <div id="map"></div>
-  <div id="panel">
-    <h4>IA Rutas - Monitor</h4>
-    <input id="inicio" placeholder="Inicio: coords (lat,lon) o dirección" style="width:100%;margin-bottom:5px;">
-    <input id="entregas" placeholder="Entregas: separar por '|' (coords o direcciones)" style="width:100%;margin-bottom:5px;">
-    <button id="iniciar">Iniciar ruta (server)</button>
-    <hr>
-    <input id="nueva" placeholder="Nueva entrega: coords o dirección" style="width:100%;margin-bottom:5px;">
-    <button id="agregar">Añadir entrega</button>
-    <hr>
-    <button id="enviarGPS">Enviar mi GPS (prueba)</button>
-    <p id="status"></p>
-  </div>
+  <div id="status">📡 Esperando señal GPS...</div>
 
   <script>
-    // Mapa base
-    const map = L.map('map').setView([22.003432, -102.290389], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const socket = io(); // Conectar con Flask-SocketIO
+
+    // Crear mapa
+    const map = L.map("map").setView([22.0, -102.29], 14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19
     }).addTo(map);
 
-    document.getElementById("status").textContent = "GPS en espera...";
+    let gpsMarker = null;
+    let routeLayer = null;
+    let routeMarkers = [];
 
-    // --- Aquí irá tu comunicación con Flask y rutas ---
-    document.getElementById("enviarGPS").addEventListener("click", () => {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((pos) => {
+    // Mostrar rutas recibidas desde el servidor
+    socket.on("route", (data) => {
+      if (routeLayer) map.removeLayer(routeLayer);
+      routeMarkers.forEach((m) => map.removeLayer(m));
+      routeMarkers = [];
+
+      const geom = data.ruta_geom.map(p => [p.lat, p.lng]);
+      const logica = data.ruta_logica.map(p => [p.lat, p.lng]);
+
+      routeLayer = L.polyline(geom, { color: "blue", weight: 4 }).addTo(map);
+      logica.forEach((p, i) => {
+        const marker = L.marker(p).addTo(map)
+          .bindPopup(i === 0 ? "Inicio" : `Entrega ${i}`);
+        routeMarkers.push(marker);
+      });
+
+      if (geom.length > 0) map.fitBounds(routeLayer.getBounds());
+    });
+
+    // Actualizar posición del repartidor (tiempo real)
+    socket.on("position", (data) => {
+      const { lat, lng } = data;
+      if (!gpsMarker) {
+        gpsMarker = L.circleMarker([lat, lng], {
+          radius: 8,
+          color: "red",
+          fillColor: "#f03",
+          fillOpacity: 0.8
+        }).addTo(map).bindPopup("Repartidor en tiempo real");
+        map.setView([lat, lng], 17);
+      } else {
+        gpsMarker.setLatLng([lat, lng]);
+      }
+
+      document.getElementById("status").textContent =
+        `🛰️ Posición actual: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    });
+
+    // GPS real en tiempo real (sin límite)
+    if ("geolocation" in navigator) {
+      navigator.geolocation.watchPosition(
+        (pos) => {
           const { latitude, longitude } = pos.coords;
-          fetch("/update_gps", {
+          fetch("/push_gps", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ lat: latitude, lon: longitude })
-          });
+          }).catch((err) => console.error("Error al enviar GPS:", err));
+        },
+        (err) => {
+          console.warn("Error de geolocalización:", err.message);
           document.getElementById("status").textContent =
-            "GPS enviado al servidor.";
-        });
-      } else {
-        alert("Tu navegador no soporta geolocalización.");
-      }
-    });
-  </script>
-
-  <!-- 🔴 BLOQUE NUEVO: GPS en tiempo real -->
-  <script>
-  let gpsMarker = null;
-  let gpsUpdateInterval = null;
-
-  function iniciarGPS() {
-      if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition((position) => {
-              const lat = position.coords.latitude;
-              const lon = position.coords.longitude;
-
-              // Centrar mapa al iniciar
-              map.setView([lat, lon], 17);
-
-              // Crear marcador rojo
-              gpsMarker = L.circleMarker([lat, lon], {
-                  radius: 8,
-                  color: "red",
-                  fillColor: "#f03",
-                  fillOpacity: 0.8
-              }).addTo(map).bindPopup("Tu ubicación actual");
-          });
-
-          // Actualizar cada 3 segundos
-          gpsUpdateInterval = setInterval(() => {
-              navigator.geolocation.getCurrentPosition((position) => {
-                  const lat = position.coords.latitude;
-                  const lon = position.coords.longitude;
-                  if (gpsMarker) {
-                      gpsMarker.setLatLng([lat, lon]);
-                  } else {
-                      gpsMarker = L.circleMarker([lat, lon], {
-                          radius: 8,
-                          color: "red",
-                          fillColor: "#f03",
-                          fillOpacity: 0.8
-                      }).addTo(map).bindPopup("Tu ubicación actual");
-                  }
-              });
-          }, 3000);
-      } else {
-          alert("Tu navegador no admite GPS o no está habilitado.");
-      }
-  }
-
-  window.addEventListener("load", iniciarGPS);
+            "⚠️ No se pudo obtener ubicación. Revisa permisos.";
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    } else {
+      alert("Tu navegador no admite geolocalización.");
+    }
   </script>
 </body>
 </html>
