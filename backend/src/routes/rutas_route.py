@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from typing import List  
 from backend.src.models.rutas_model import Ruta
 from backend.src.services.rutas import registrar_ruta, listar_rutas
 
@@ -8,6 +9,6 @@ router = APIRouter(prefix="/rutas", tags=["Rutas"])
 def registrar_ruta_endpoint(ruta: Ruta):
     return registrar_ruta(ruta)
 
-@router.get("/", response_model=list[Ruta])
+@router.get("/", response_model=List[Ruta])  
 def listar_rutas_endpoint():
     return listar_rutas()

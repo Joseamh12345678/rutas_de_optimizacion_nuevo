@@ -1,4 +1,5 @@
 from backend.src.services.utils import post
+from polyline.codec import decode  # ✅ Agregado para decodificar geometría
 
 def optimize_route(locations: list):
     url = "https://routes.googleapis.com/directions/v2:computeRoutes"
@@ -8,4 +9,12 @@ def optimize_route(locations: list):
         "intermediates": [{"address": {"formattedAddress": loc}} for loc in locations[1:-1]],
         "travelMode": "DRIVE"
     }
-    return post(url, body)
+    data = post(url, body)
+
+    # ✅ Decodificar geometría si está disponible
+    if "routes" in data and "polyline" in data["routes"][0]:
+        encoded = data["routes"][0]["polyline"]["encodedPolyline"]
+        decoded_coords = decode(encoded)  # [(lat, lon), ...]
+        return {"decoded_geometry": decoded_coords, "raw": data}
+
+    return data
